@@ -64,6 +64,8 @@ class Program:
                     percepts.append('Whiff')   # Ô lân cận chứa khí độc
                 if 'H_P' in cell_contents:
                     percepts.append('Glow')   # Ô lân cận chứa thuốc hồi phục
+                if 'S' in cell_contents:  # Kiểm tra nếu có tiếng "Scream"
+                    percepts.append('Scream')  # Nghe tiếng "Scream" nếu Wumpus bị giết
         return percepts
 
 
