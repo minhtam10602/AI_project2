@@ -1,5 +1,4 @@
 from collections import deque
-import random
 
 class Program:
     def __init__(self, file_path):
@@ -46,8 +45,6 @@ class Program:
             return self.grid_map[row][col]
         else:
             raise IndexError(f"Tọa độ ngoài phạm vi: ({row}, {col})")
-        
-    
 
     def get_percepts(self, row, col):
         """Lấy các nhận thức cho vị trí ô được chỉ định."""
@@ -71,98 +68,39 @@ class Program:
         return percepts
 
 
+from collections import deque
+
 class Agent:
     def __init__(self, environment):
-        # Khởi tạo tác nhân với môi trường
         self.environment = environment
-        self.current_pos = (0, 0)  # Vị trí hiện tại của tác nhân
-        self.facing_direction = 'E'  # Hướng hiện tại của tác nhân
-        self.health_status = 100  # Trạng thái sức khỏe
-        self.gold_acquired = False  # Có vàng không
-        self.is_alive = True  # Tác nhân còn sống không
-        self.action_history = []  # Lịch sử hành động
-        self.visited = set()  # Theo dõi các vị trí đã thăm
-        self.path = []  # Theo dõi con đường để đi theo
-        self.safe_cells = set() # Theo dõi các ô an toàn có thể đi
-        self.unsafe_cells = set() # Theo dõi các ô có thể nguy hiểm cần cẩn thận
-        self.danger_type = set() # Theo dõi mối nguy hiểm ở trên
-        self.agent_score = 1000 # Điểm ban đầu, theo dõi hiệu suất của tác nhân
+        self.current_pos = (0, 0)
+        self.facing_direction = 'E'
+        self.health_status = 100
+        self.gold_acquired = False
+        self.is_alive = True
+        self.action_history = []
+        self.visited = set()
+        self.path = []
+        self.visited.add(self.current_pos)
 
-    def evaluate_result(self):
-        """Đánh giá kết quả của trò chơi."""
-        if self.agent_score < 0 or not self.is_alive:
-            print(f"Score: {self.agent_score}. The game will restart for a better result.")
-            return False
-        return True
-
-    def update_score(self, action):
-        action_scores = {
-            'Grab gold': 5000,
-            'shoot_arrow': -100,
-            'Killed by Wumpus': -10000,
-            'Fall into pit': -10000,
-            'Climb out': 10,
-        }
-        self.agent_score += action_scores.get(action, -10)
-            
-    def mark_safe(self, pos):
-        r, c = pos
-        for dr, dc in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
-            nr, nc = r + dr, c + dc 
-            if 0 <= nr <= self.environment.grid_size and 0 <= nc <= self.environment.grid_size:
-                if (nr, nc) in self.unsafe_cells:
-                    self.unsafe_cells.remove((nr, nc))
-                if (nr, nc) not in self.visited:
-                    self.safe_cells.add((nr, nc))
-                    
-    def mark_unsafe(self, pos, danger_type):
-        r, c = pos
-        for dr, dc in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
-            nr, nc = r + dr, c + dc 
-            if 0 <= nr <= self.environment.grid_size and 0 <= nc <= self.environment.grid_size and (nr, nc) not in self.safe_cells:
-                self.unsafe_cells.add((nr, nc))
-                self.danger_type.add(danger_type)
-                
     def record_action(self, action):
-        """Ghi lại hành động vào lịch sử."""
         r, c = self.current_pos
         self.action_history.append(f"({r+1},{c+1}): {action}")
 
-    def check_cell(self):
-        r, c = self.current_pos
-        tile = self.environment.get_cell_contents(r, c)
-        
-        if tile == 'W':
-            self.is_alive = False
-            self.update_score('Killed by Wumpus')
-            self.record_action('Killed by Wumpus')
-            print("Game over! Killed by Wumpus!")
-            
-        if tile == 'P':
-            self.is_alive = False
-            self.update_score('Fall into pit')
-            self.record_action('Fell into pit')
-            print("Game over! Fell into pit!")
-        
-        if tile == 'P_G':
-            self.health_status -= 25
-            self.record_action('Poisoned')
-            print("A Poison Tile! You will lose health!")
-        
-        if tile == 'H_P':
-            self.health_status += 25
-            self.record_action('Heal')
-            self.grid_map[r][c] = self.grid_map[r][c].replace('H_P', '-')
-            print('A health potion! Your health will be recovered!')
+    def is_safe_to_advance(self, position):
+        """Check if the next position is safe to advance."""
+        r, c = position
+        percepts = self.environment.get_percepts(r, c)
+        print(f"Checking safety for position {position}. Percepts: {percepts}")
 
-        if tile == 'G':
-            self.update_score('Grab gold')
-            self.record_action('Grab gold')
-            self.grid_map[r][c] = self.grid_map[r][c].replace('G', '-')
-            print('You found gold! Congratulations!')
-            
+        if 'Breeze' in percepts or 'Stench' in percepts or 'Whiff' in percepts:
+            print("Not safe to advance!")
+            return False  # Not safe if there are pits, Wumpus, or gas nearby
+        print("Safe to advance.")
+        return True
+
     def advance(self):
-        """Tiến về phía trước theo hướng hiện tại."""
+        """Move forward according to the current facing direction."""
         r, c = self.current_pos
         if self.facing_direction == 'N':
             r -= 1
@@ -173,212 +111,110 @@ class Agent:
         elif self.facing_direction == 'W':
             c -= 1
 
-        if 0 <= r < self.environment.grid_size and 0 <= c < self.environment.grid_size:
-            self.current_pos = (r, c)
-            self.visited.add(self.current_pos)
-            self.record_action("moved forward")
-            print(f"Moved to {self.current_pos}")
-            
-            self.check_percepts()
-            self.update_score('move')
+        next_pos = (r, c)
+
+        if next_pos not in self.visited and 0 <= r < self.environment.grid_size and 0 <= c < self.environment.grid_size:
+            if self.is_safe_to_advance(next_pos):
+                self.current_pos = next_pos
+                self.visited.add(self.current_pos)
+                self.record_action("moved forward")
+                print(f"Moved to {self.current_pos}")
+                self.check_percepts()
+                if 'G' in self.environment.get_cell_contents(r, c):
+                    print("Gold found! Stopping the game.")
+                    self.record_action("found gold")
+                    self.gold_acquired = True
+                    return
+            else:
+                print("Danger detected! Avoiding.")
+                self.avoid_obstacles()
         else:
-            print("Blocked by boundary!")
-            # Thay đổi hướng và thử lại
-            self.rotate_right()
-            self.advance()
+            print("Blocked by boundary or already visited! Changing direction.")
+            self.avoid_obstacles()
 
     def rotate_left(self):
-        """Xoay sang trái theo hướng hiện tại."""
         directions = ['N', 'W', 'S', 'E']
         self.facing_direction = directions[(directions.index(self.facing_direction) + 1) % 4]
         self.record_action("rotated left")
         print(f"Turned left. Now facing {self.facing_direction}")
 
     def rotate_right(self):
-        """Xoay sang phải theo hướng hiện tại."""
         directions = ['N', 'E', 'S', 'W']
         self.facing_direction = directions[(directions.index(self.facing_direction) + 1) % 4]
         self.record_action("rotated right")
         print(f"Turned right. Now facing {self.facing_direction}")
 
     def check_percepts(self):
-        """Kiểm tra các nhận thức tại vị trí hiện tại."""
+        """Check the percepts at the current position and act accordingly."""
         r, c = self.current_pos
         percepts = self.environment.get_percepts(r, c)
         print(f"Percepts at {self.current_pos}: {', '.join(percepts)}")
-        
+
         if 'Stench' in percepts:
-            self.mark_unsafe((r, c), 'Wumpus')
             print("Stench detected! Wumpus nearby.")
+            self.avoid_obstacles()
+
         if 'Breeze' in percepts:
-            self.mark_unsafe((r, c), 'Pit')
             print("Breeze detected! Pit nearby.")
+            self.avoid_obstacles()
+
         if 'Whiff' in percepts:
-            self.mark_unsafe((r, c), 'Poison')
             print("Whiff detected! Poisonous gas nearby.")
+            self.avoid_obstacles()
+
         if 'Glow' in percepts:
             print("Glow detected! Healing potion nearby.")
+            self.collect_healing_potion()
+
         if 'Scream' in percepts:
             print("Scream heard! Wumpus has been killed.")
-        
-        if not percepts:
-            self.mark_safe((r, c))
-    
-    def wumpus_dies(self):
-        r, c = self.current_pos
-        self.mark_safe((r, c))
-        
-        
-        for dr, dc in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
-            nr, nc = r + dr, c + dc
-            if 0 <= nr < self.grid_size and 0 <= nc < self.grid_size:
-                if 'W' in self.get_cell_contents(nr, nc):
-                    self.grid_map[nr][nc] = self.grid_map[nr][nc].replace('W', '-')
-    
-    def get_adjacent_cells(self):
-        """Return a list of adjacent cells to the current position."""
-        r, c = self.current_pos
-        adjacent_cells = []
-        directions = [(-1, 0), (1, 0), (0, -1), (0, 1)]  # N, S, W, E directions
-
-        for dr, dc in directions:
-            nr, nc = r + dr, c + dc
-            if 0 <= nr < self.environment.grid_size and 0 <= nc < self.environment.grid_size:
-                adjacent_cells.append((nr, nc))
-
-        return adjacent_cells
-
-    def find_path_to(self, goal):
-        """Tìm đường ngắn nhất đến mục tiêu bằng BFS."""
-        from collections import deque
-        
-        start = self.current_pos
-        queue = deque([[start]])
-        visited = set()
-        visited.add(start)
-
-        while queue:
-            path = queue.popleft()
-            pos = path[-1]
-
-            if pos == goal:
-                self.path = path
-                return
-
-            for direction in ['N', 'E', 'S', 'W']:
-                next_pos = self.move_in_direction(pos, direction)
-                if next_pos and next_pos not in visited:
-                    visited.add(next_pos)
-                    queue.append(path + [next_pos])
-
-    def move_in_direction(self, pos, direction):
-        """Di chuyển theo hướng chỉ định từ vị trí hiện tại."""
-        r, c = pos
-        if direction == 'N':
-            r -= 1
-        elif direction == 'S':
-            r += 1
-        elif direction == 'E':
-            c += 1
-        elif direction == 'W':
-            c -= 1
-
-        if 0 <= r < self.environment.grid_size and 0 <= c < self.environment.grid_size:
-            return (r, c)
-        else:
-            return None
-
-    def follow_path(self):
-        """Đi theo con đường đã tính toán trước đó."""
-        for next_pos in self.path:
-            while self.current_pos != next_pos:
-                self.face_direction(next_pos)
-                self.advance()
-                if not self.is_alive:
-                    return
-            self.path.remove(next_pos)
-
-    def face_direction(self, goal):
-        """Xoay để đối mặt với hướng của vị trí mục tiêu."""
-        r1, c1 = self.current_pos
-        r2, c2 = goal
-        if r2 < r1:
-            target_direction = 'N'
-        elif r2 > r1:
-            target_direction = 'S'
-        elif c2 < c1:
-            target_direction = 'W'
-        elif c2 > c1:
-            target_direction = 'E'
-
-        while self.facing_direction != target_direction:
-            self.rotate_right()
 
     def avoid_obstacles(self):
-        """Tránh các chướng ngại vật dựa trên các nhận thức."""
-        r, c = self.current_pos
-        percepts = self.environment.get_percepts(r, c)
-        
-        adjacent_cells = self.get_adjacent_cells((r, c))
-        
-        if 'Breeze' in percepts or 'Whiff' in percepts:
-            """Tránh các chướng ngại vật dựa trên các nhận thức."""
-            for cell in adjacent_cells:
-                if cell in self.safe_cells and cell not in self.visited:
-                    self.find_path_to(cell)
-                    self.follow_path()
-                    return
-            
-            for cell in adjacent_cells:
-                if cell in self.unsafe_cells and cell not in self.visited:
-                    self.find_path_to(cell)
-                    self.follow_path()
-                    return
-                
-        elif 'Stench' in percepts:
-            self.rotate_right()  # Chiến lược ví dụ
+        """Avoid obstacles based on percepts and avoid endless loops."""
+        for _ in range(4):  # Try all four directions
+            self.rotate_right()
+            r, c = self.current_pos
+            next_pos = None
 
-    def export_results(self, file_name):
-        """Lưu lịch sử hành động vào tệp tin."""
-        with open(file_name, 'w') as f:
-            for action in self.action_history:
-                f.write(action + '\n')
-        print(f"Actions saved to {file_name}")
+            if self.facing_direction == 'N':
+                next_pos = (r - 1, c)
+            elif self.facing_direction == 'S':
+                next_pos = (r + 1, c)
+            elif self.facing_direction == 'E':
+                next_pos = (r, c + 1)
+            elif self.facing_direction == 'W':
+                next_pos = (r, c - 1)
+
+            if next_pos and 0 <= next_pos[0] < self.environment.grid_size and 0 <= next_pos[1] < self.environment.grid_size:
+                if next_pos not in self.visited and self.is_safe_to_advance(next_pos):
+                    self.advance()
+                    return
+        print("No safe moves available. Ending the game.")
+        self.is_alive = False
 
     def start_game(self):
-        """Bắt đầu trò chơi và điều khiển tác nhân."""
+        """Start the game loop."""
         while self.is_alive:
             if self.gold_acquired:
-                if self.current_pos == (0, 0):
-                    print("Escaped with the gold! Victory!")
-                    self.record_action("escaped with gold")
-                    break
-                else:
-                    self.find_path_to((0, 0))
-                    self.follow_path()
+                print("Gold acquired, stopping the game.")
+                break
             else:
-                gold_pos = None
-                for r in range(self.environment.grid_size):
-                    for c in range(self.environment.grid_size):
-                        if 'G' in self.environment.get_cell_contents(r, c):
-                            gold_pos = (r, c)
-                            break
-                    if gold_pos:
-                        break
-                if gold_pos:
-                    self.find_path_to(gold_pos)
-                    self.follow_path()
-                else:
-                    self.rotate_right()
-            
+                self.advance()
+
             if self.health_status <= 0:
-                self.is_alive = False
                 print("Health depleted! Game Over.")
                 self.record_action("health depleted")
                 break
 
+        # Save the path and actions to the output file
         self.export_results('result1.txt')
 
+    def export_results(self, file_name):
+        """Save the action history to an output file."""
+        with open(file_name, 'w') as f:
+            for action in self.action_history:
+                f.write(action + '\n')
+        print(f"Actions saved to {file_name}")
 
 # Khởi tạo và bắt đầu trò chơi
 program = Program('map1.txt')  # Tạo đối tượng Program với bản đồ từ tệp 'map1.txt'
@@ -386,3 +222,4 @@ program.display_map()  # Hiển thị bản đồ
 
 agent = Agent(program)  # Tạo đối tượng Agent và liên kết với Program
 agent.start_game()  # Bắt đầu chơi
+
