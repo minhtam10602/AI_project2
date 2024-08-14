@@ -46,6 +46,8 @@ class Program:
             return self.grid_map[row][col]
         else:
             raise IndexError(f"Tọa độ ngoài phạm vi: ({row}, {col})")
+        
+    
 
     def get_percepts(self, row, col):
         """Lấy các nhận thức cho vị trí ô được chỉ định."""
@@ -81,12 +83,84 @@ class Agent:
         self.action_history = []  # Lịch sử hành động
         self.visited = set()  # Theo dõi các vị trí đã thăm
         self.path = []  # Theo dõi con đường để đi theo
+        self.safe_cells = set() # Theo dõi các ô an toàn có thể đi
+        self.unsafe_cells = set() # Theo dõi các ô có thể nguy hiểm cần cẩn thận
+        self.danger_type = set() # Theo dõi mối nguy hiểm ở trên
+        self.agent_score = 1000 # Điểm ban đầu, theo dõi hiệu suất của tác nhân
 
+    def evaluate_result(self):
+        """Đánh giá kết quả của trò chơi."""
+        if self.agent_score < 0 or not self.is_alive:
+            print(f"Score: {self.agent_score}. The game will restart for a better result.")
+            return False
+        return True
+
+    def update_score(self, action):
+        action_scores = {
+            'Grab gold': 5000,
+            'shoot_arrow': -100,
+            'Killed by Wumpus': -10000,
+            'Fall into pit': -10000,
+            'Climb out': 10,
+        }
+        self.agent_score += action_scores.get(action, -10)
+            
+    def mark_safe(self, pos):
+        r, c = pos
+        for dr, dc in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
+            nr, nc = r + dr, c + dc 
+            if 0 <= nr <= self.environment.grid_size and 0 <= nc <= self.environment.grid_size:
+                if (nr, nc) in self.unsafe_cells:
+                    self.unsafe_cells.remove((nr, nc))
+                if (nr, nc) not in self.visited:
+                    self.safe_cells.add((nr, nc))
+                    
+    def mark_unsafe(self, pos, danger_type):
+        r, c = pos
+        for dr, dc in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
+            nr, nc = r + dr, c + dc 
+            if 0 <= nr <= self.environment.grid_size and 0 <= nc <= self.environment.grid_size and (nr, nc) not in self.safe_cells:
+                self.unsafe_cells.add((nr, nc))
+                self.danger_type.add(danger_type)
+                
     def record_action(self, action):
         """Ghi lại hành động vào lịch sử."""
         r, c = self.current_pos
         self.action_history.append(f"({r+1},{c+1}): {action}")
 
+    def check_cell(self):
+        r, c = self.current_pos
+        tile = self.environment.get_cell_contents(r, c)
+        
+        if tile == 'W':
+            self.is_alive = False
+            self.update_score('Killed by Wumpus')
+            self.record_action('Killed by Wumpus')
+            print("Game over! Killed by Wumpus!")
+            
+        if tile == 'P':
+            self.is_alive = False
+            self.update_score('Fall into pit')
+            self.record_action('Fell into pit')
+            print("Game over! Fell into pit!")
+        
+        if tile == 'P_G':
+            self.health_status -= 25
+            self.record_action('Poisoned')
+            print("A Poison Tile! You will lose health!")
+        
+        if tile == 'H_P':
+            self.health_status += 25
+            self.record_action('Heal')
+            self.grid_map[r][c] = self.grid_map[r][c].replace('H_P', '-')
+            print('A health potion! Your health will be recovered!')
+
+        if tile == 'G':
+            self.update_score('Grab gold')
+            self.record_action('Grab gold')
+            self.grid_map[r][c] = self.grid_map[r][c].replace('G', '-')
+            print('You found gold! Congratulations!')
+            
     def advance(self):
         """Tiến về phía trước theo hướng hiện tại."""
         r, c = self.current_pos
@@ -104,7 +178,9 @@ class Agent:
             self.visited.add(self.current_pos)
             self.record_action("moved forward")
             print(f"Moved to {self.current_pos}")
+            
             self.check_percepts()
+            self.update_score('move')
         else:
             print("Blocked by boundary!")
             # Thay đổi hướng và thử lại
@@ -130,17 +206,47 @@ class Agent:
         r, c = self.current_pos
         percepts = self.environment.get_percepts(r, c)
         print(f"Percepts at {self.current_pos}: {', '.join(percepts)}")
-
+        
         if 'Stench' in percepts:
+            self.mark_unsafe((r, c), 'Wumpus')
             print("Stench detected! Wumpus nearby.")
         if 'Breeze' in percepts:
+            self.mark_unsafe((r, c), 'Pit')
             print("Breeze detected! Pit nearby.")
         if 'Whiff' in percepts:
+            self.mark_unsafe((r, c), 'Poison')
             print("Whiff detected! Poisonous gas nearby.")
         if 'Glow' in percepts:
             print("Glow detected! Healing potion nearby.")
         if 'Scream' in percepts:
             print("Scream heard! Wumpus has been killed.")
+        
+        if not percepts:
+            self.mark_safe((r, c))
+    
+    def wumpus_dies(self):
+        r, c = self.current_pos
+        self.mark_safe((r, c))
+        
+        
+        for dr, dc in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
+            nr, nc = r + dr, c + dc
+            if 0 <= nr < self.grid_size and 0 <= nc < self.grid_size:
+                if 'W' in self.get_cell_contents(nr, nc):
+                    self.grid_map[nr][nc] = self.grid_map[nr][nc].replace('W', '-')
+    
+    def get_adjacent_cells(self):
+        """Return a list of adjacent cells to the current position."""
+        r, c = self.current_pos
+        adjacent_cells = []
+        directions = [(-1, 0), (1, 0), (0, -1), (0, 1)]  # N, S, W, E directions
+
+        for dr, dc in directions:
+            nr, nc = r + dr, c + dc
+            if 0 <= nr < self.environment.grid_size and 0 <= nc < self.environment.grid_size:
+                adjacent_cells.append((nr, nc))
+
+        return adjacent_cells
 
     def find_path_to(self, goal):
         """Tìm đường ngắn nhất đến mục tiêu bằng BFS."""
@@ -213,8 +319,22 @@ class Agent:
         r, c = self.current_pos
         percepts = self.environment.get_percepts(r, c)
         
+        adjacent_cells = self.get_adjacent_cells((r, c))
+        
         if 'Breeze' in percepts or 'Whiff' in percepts:
-            self.rotate_left()  # Chiến lược ví dụ
+            """Tránh các chướng ngại vật dựa trên các nhận thức."""
+            for cell in adjacent_cells:
+                if cell in self.safe_cells and cell not in self.visited:
+                    self.find_path_to(cell)
+                    self.follow_path()
+                    return
+            
+            for cell in adjacent_cells:
+                if cell in self.unsafe_cells and cell not in self.visited:
+                    self.find_path_to(cell)
+                    self.follow_path()
+                    return
+                
         elif 'Stench' in percepts:
             self.rotate_right()  # Chiến lược ví dụ
 
@@ -250,8 +370,9 @@ class Agent:
                     self.follow_path()
                 else:
                     self.rotate_right()
-
+            
             if self.health_status <= 0:
+                self.is_alive = False
                 print("Health depleted! Game Over.")
                 self.record_action("health depleted")
                 break
