@@ -1,6 +1,0 @@
-(1,1): rotated right
-(2,1): moved forward
-(2,1): rotated left
-(2,2): moved forward
-(2,3): moved forward
-(2,3): encountered Wumpus
