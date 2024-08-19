@@ -3,7 +3,7 @@ import sys
 from collections import deque
 
 # Import các lớp Program và Agent từ file hiện tại (cần thay thế bằng tên file gốc của bạn)
-from main.py import Program, Agent  # Thay 'your_existing_file' bằng tên file hiện tại
+from main import Program, Agent  # Thay 'your_existing_file' bằng tên file hiện tại
 
 # Khởi tạo Pygame
 pygame.init()
