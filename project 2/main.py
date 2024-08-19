@@ -80,7 +80,6 @@ class Agent:
         self.is_alive = True
         self.action_history = []
         self.visited = set()
-        self.point = 1000
         self.path = []
         self.visited.add(self.current_pos)
 
@@ -91,7 +90,7 @@ class Agent:
             self.point -= 10000
         else:
             self.point -= 10
-        
+
     def record_action(self, action):
         r, c = self.current_pos
         self.action_history.append(f"({r+1},{c+1}): {action}")
@@ -107,7 +106,6 @@ class Agent:
             return False  # Not safe if there are pits, Wumpus, or gas nearby
         print("Safe to advance.")
         return True
-
     def advance(self):
         """Move forward according to the current facing direction."""
         r, c = self.current_pos
@@ -121,8 +119,8 @@ class Agent:
             c -= 1
 
         next_pos = (r, c)
-        self.point_assessment('advance')
-        if next_pos not in self.visited and 0 <= r < self.environment.grid_size and 0 <= c < self.environment.grid_size:
+
+        if 0 <= r < self.environment.grid_size and 0 <= c < self.environment.grid_size:
             if self.is_safe_to_advance(next_pos):
                 self.current_pos = next_pos
                 self.visited.add(self.current_pos)
@@ -131,7 +129,6 @@ class Agent:
                 self.check_percepts()
                 if 'G' in self.environment.get_cell_contents(r, c):
                     print("Gold found! Stopping the game.")
-                    self.point_assessment('found gold')
                     self.record_action("found gold")
                     self.gold_acquired = True
                     return
@@ -139,20 +136,19 @@ class Agent:
                 print("Danger detected! Avoiding.")
                 self.avoid_obstacles()
         else:
-            print("Blocked by boundary or already visited! Changing direction.")
+            print("Blocked by boundary! Changing direction.")
             self.avoid_obstacles()
+
 
     def rotate_left(self):
         directions = ['N', 'W', 'S', 'E']
         self.facing_direction = directions[(directions.index(self.facing_direction) + 1) % 4]
-        self.point_assessment('rotated left')
         self.record_action("rotated left")
         print(f"Turned left. Now facing {self.facing_direction}")
 
     def rotate_right(self):
         directions = ['N', 'E', 'S', 'W']
         self.facing_direction = directions[(directions.index(self.facing_direction) + 1) % 4]
-        self.point_assessment('rotated right')
         self.record_action("rotated right")
         print(f"Turned right. Now facing {self.facing_direction}")
 
@@ -202,7 +198,6 @@ class Agent:
                     self.advance()
                     return
         print("No safe moves available. Ending the game.")
-        self.point_assessment('die')
         self.is_alive = False
 
     def start_game(self):
@@ -222,19 +217,11 @@ class Agent:
         # Save the path and actions to the output file
         self.export_results('result1.txt')
 
-    def export_results(self, file_name, result):
+    def export_results(self, file_name):
         """Save the action history to an output file."""
         with open(file_name, 'w') as f:
             for action in self.action_history:
                 f.write(action + '\n')
-                
-            if not self.is_alive or self.health_status <= 0:
-                f.write('Agent died! Agent failed!\n')
-            elif self.point < 0:
-                f.write('Score is too low! Agent failed\n')
-            else:
-                f.write('Agent success!\n')
-                
         print(f"Actions saved to {file_name}")
 
 # Khởi tạo và bắt đầu trò chơi
@@ -243,4 +230,3 @@ program.display_map()  # Hiển thị bản đồ
 
 agent = Agent(program)  # Tạo đối tượng Agent và liên kết với Program
 agent.start_game()  # Bắt đầu chơi
-
